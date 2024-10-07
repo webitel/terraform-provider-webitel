@@ -10,7 +10,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 
-	"github.com/kirychukyurii/terraform-provider-webitel/internal/provider"
+	"github.com/webitel/terraform-provider-webitel/internal/provider"
 )
 
 var (
