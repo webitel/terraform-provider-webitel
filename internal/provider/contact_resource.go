@@ -5,10 +5,12 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/go-openapi/runtime"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -220,10 +222,8 @@ func (r *ContactResource) Create(ctx context.Context, req resource.CreateRequest
 		return
 	}
 
-	contact := httpResp.GetPayload()
-
 	// Save data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, contactToTF(contact))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, contactToTF(httpResp.GetPayload()))...)
 }
 
 func (r *ContactResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -242,6 +242,14 @@ func (r *ContactResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	httpResp, err := r.client.Contacts.ContactsLocateContact(input)
 	if err != nil {
+		var runtimeErr *runtime.APIError
+		errors.As(err, &runtimeErr)
+		if runtimeErr != nil && runtimeErr.IsCode(http.StatusNotFound) {
+			// Treat HTTP 404 Not Found status as a signal to recreate resource
+			// and return early
+			resp.State.RemoveResource(ctx)
+		}
+
 		resp.Diagnostics.AddError(
 			"Unable to Refresh Resource",
 			"An unexpected error occurred while attempting to refresh resource state. "+
@@ -252,18 +260,8 @@ func (r *ContactResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	// Treat HTTP 404 Not Found status as a signal to recreate resource
-	// and return early
-	if httpResp.IsCode(http.StatusNotFound) {
-		resp.State.RemoveResource(ctx)
-
-		return
-	}
-
-	contact := httpResp.GetPayload()
-
 	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, contactToTF(contact))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, contactToTF(httpResp.GetPayload()))...)
 }
 
 func (r *ContactResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -408,7 +406,7 @@ func (r *ContactResource) Delete(ctx context.Context, req resource.DeleteRequest
 	}
 
 	// Return error if the HTTP status code is not 200 OK or 404 Not Found
-	if httpResp.IsCode(http.StatusNotFound) && httpResp.IsCode(http.StatusOK) {
+	if !httpResp.IsCode(http.StatusNotFound) && !httpResp.IsCode(http.StatusOK) {
 		resp.Diagnostics.AddError(
 			"Unable to Delete Resource",
 			"An unexpected error occurred while attempting to delete the resource. "+
