@@ -424,9 +424,13 @@ func (r *ContactResource) ImportState(ctx context.Context, req resource.ImportSt
 
 func contactToTF(in *models.WebitelContactsContact) *ContactResourceModel {
 	out := &ContactResourceModel{
-		ID:   types.StringValue(in.ID),
-		ETag: types.StringValue(in.Etag),
-		Name: types.StringValue(in.Name.CommonName),
+		ID:        types.StringValue(in.ID),
+		ETag:      types.StringValue(in.Etag),
+		Name:      types.StringValue(in.Name.CommonName),
+		About:     types.StringNull(),
+		Labels:    types.ListNull(types.StringType),
+		Variables: types.MapNull(types.StringType),
+		Phones:    types.SetNull(types.ObjectType{AttrTypes: destinationSchema().AttributeTypes()}),
 	}
 
 	if in.About != "" {
