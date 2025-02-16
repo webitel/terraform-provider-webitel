@@ -9,7 +9,7 @@ require (
 	github.com/hashicorp/terraform-plugin-go v0.24.0
 	github.com/hashicorp/terraform-plugin-log v0.9.0
 	github.com/hashicorp/terraform-plugin-testing v1.10.0
-	github.com/webitel/webitel-openapi-client-go v0.0.0-20241007075952-1be14aeff164
+	github.com/webitel/webitel-openapi-client-go v0.0.0-20250216184647-bbcacf464f7e
 )
 
 require (

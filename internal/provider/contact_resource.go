@@ -276,113 +276,110 @@ func (r *ContactResource) Update(ctx context.Context, req resource.UpdateRequest
 		return
 	}
 
-	// TODO: Compare attributes value between plan and
-	//  	prior state to update only changed values
-	// if !plan.ETag.Equal(state.ETag) {
-	// 	resp.Diagnostics.AddError(
-	// 		"Unable to Update Resource",
-	// 		"An error occurred while attempting to update the resource. "+
-	// 			"Etag was changed.\n\n",
-	// 	)
-	//
-	// 	resp.State.RemoveResource(ctx)
-	//
-	// 	return
-	// }
-
-	input := &models.ContactsUpdateContactParamsBody{
-		About: plan.About.ValueString(),
-		Name: &models.WebitelContactsInputName{
-			CommonName: stripSpaces(plan.Name.ValueString()),
-		},
+	update := false
+	if !plan.About.Equal(state.About) || !plan.Name.Equal(state.Name) || !plan.Labels.Equal(state.Labels) ||
+		!plan.Variables.Equal(state.Variables) || !plan.Phones.Equal(state.Phones) {
+		update = true
 	}
 
-	if !plan.Labels.IsNull() {
-		labels, err := listToLabels(plan.Labels)
+	newState := state
+	if update {
+		input := &models.ContactsUpdateContactParamsBody{
+			About: plan.About.ValueString(),
+			Name: &models.WebitelContactsInputName{
+				CommonName: stripSpaces(plan.Name.ValueString()),
+			},
+		}
+
+		if !plan.Labels.IsNull() {
+			labels, err := listToLabels(plan.Labels)
+			if err != nil {
+				resp.Diagnostics.AddError("Unable to make contact labels structure", err.Error())
+
+				return
+			}
+
+			input.Labels = make([]*models.WebitelContactsInputLabel, 0, len(labels))
+			for _, l := range labels {
+				label := &models.WebitelContactsInputLabel{
+					Label: l,
+				}
+
+				input.Labels = append(input.Labels, label)
+			}
+		}
+
+		if !plan.Variables.IsNull() {
+			variables, err := mapToVariables(plan.Variables)
+			if err != nil {
+				resp.Diagnostics.AddError("Unable to make contact variables structure", err.Error())
+
+				return
+			}
+
+			input.Variables = make([]*models.WebitelContactsInputVariable, 0, len(variables))
+			for k, v := range variables {
+				variable := &models.WebitelContactsInputVariable{
+					Key:   &k,
+					Value: v,
+				}
+
+				input.Variables = append(input.Variables, variable)
+			}
+		}
+
+		if !plan.Phones.IsNull() {
+			var phones []ContactResourcePhones
+			plan.Phones.ElementsAs(ctx, &phones, true)
+			input.Phones = make([]*models.WebitelContactsInputPhoneNumber, 0, len(phones))
+			for _, phone := range phones {
+				obj := &models.WebitelContactsInputPhoneNumber{
+					Type: &models.WebitelContactsLookup{
+						ID: phone.Code.ValueString(),
+					},
+					Number: phone.Code.ValueStringPointer(),
+				}
+
+				input.Phones = append(input.Phones, obj)
+			}
+		}
+
+		params := &contacts.ContactsUpdateContactParams{
+			Context: ctx,
+			Etag:    plan.ETag.ValueString(),
+			Input:   input,
+			Fields:  contactDefaultFields,
+		}
+
+		httpResp, err := r.client.Contacts.ContactsUpdateContact(params)
 		if err != nil {
-			resp.Diagnostics.AddError("Unable to make contact labels structure", err.Error())
+			resp.Diagnostics.AddError(
+				"Unable to Update Resource",
+				"An unexpected error occurred while attempting to update the resource. "+
+					"Please retry the operation or report this issue to the provider developers.\n\n"+
+					"HTTP Error: "+err.Error(),
+			)
 
 			return
 		}
 
-		input.Labels = make([]*models.WebitelContactsInputLabel, 0, len(labels))
-		for _, l := range labels {
-			label := &models.WebitelContactsInputLabel{
-				Label: l,
-			}
-
-			input.Labels = append(input.Labels, label)
-		}
-	}
-
-	if !plan.Variables.IsNull() {
-		variables, err := mapToVariables(plan.Variables)
-		if err != nil {
-			resp.Diagnostics.AddError("Unable to make contact variables structure", err.Error())
+		// Return error if the HTTP status code is not 200 OK
+		if httpResp.IsCode(http.StatusOK) {
+			resp.Diagnostics.AddError(
+				"Unable to Update Resource",
+				"An unexpected error occurred while attempting to update the resource. "+
+					"Please retry the operation or report this issue to the provider developers.\n\n"+
+					"HTTP Status: "+fmt.Sprintf("%d", httpResp.Code()),
+			)
 
 			return
 		}
 
-		input.Variables = make([]*models.WebitelContactsInputVariable, 0, len(variables))
-		for k, v := range variables {
-			variable := &models.WebitelContactsInputVariable{
-				Key:   &k,
-				Value: v,
-			}
-
-			input.Variables = append(input.Variables, variable)
-		}
-	}
-
-	if !plan.Phones.IsNull() {
-		var phones []ContactResourcePhones
-		plan.Phones.ElementsAs(ctx, &phones, true)
-		input.Phones = make([]*models.WebitelContactsInputPhoneNumber, 0, len(phones))
-		for _, phone := range phones {
-			obj := &models.WebitelContactsInputPhoneNumber{
-				Type: &models.WebitelContactsLookup{
-					ID: phone.Code.ValueString(),
-				},
-				Number: phone.Code.ValueStringPointer(),
-			}
-
-			input.Phones = append(input.Phones, obj)
-		}
-	}
-
-	params := &contacts.ContactsUpdateContactParams{
-		Context: ctx,
-		Etag:    plan.ETag.ValueString(),
-		Input:   input,
-		Fields:  contactDefaultFields,
-	}
-
-	httpResp, err := r.client.Contacts.ContactsUpdateContact(params)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Unable to Update Resource",
-			"An unexpected error occurred while attempting to update the resource. "+
-				"Please retry the operation or report this issue to the provider developers.\n\n"+
-				"HTTP Error: "+err.Error(),
-		)
-
-		return
-	}
-
-	// Return error if the HTTP status code is not 200 OK
-	if httpResp.IsCode(http.StatusOK) {
-		resp.Diagnostics.AddError(
-			"Unable to Update Resource",
-			"An unexpected error occurred while attempting to update the resource. "+
-				"Please retry the operation or report this issue to the provider developers.\n\n"+
-				"HTTP Status: "+fmt.Sprintf("%d", httpResp.Code()),
-		)
-
-		return
+		newState = *contactToTF(httpResp.GetPayload())
 	}
 
 	// Save updated data into Terraform state
-	resp.Diagnostics.Append(resp.State.Set(ctx, contactToTF(httpResp.GetPayload()))...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, newState)...)
 }
 
 func (r *ContactResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
