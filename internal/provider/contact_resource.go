@@ -15,6 +15,8 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	webitel "github.com/webitel/webitel-openapi-client-go/client"
@@ -61,8 +63,9 @@ func (r *ContactResource) Schema(ctx context.Context, req resource.SchemaRequest
 		Description: "The Contact principal resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
-				Computed:    true,
-				Description: "The unique ID of the association. Never changes.",
+				Computed:      true,
+				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				Description:   "The unique ID of the association. Never changes.",
 			},
 			"etag": schema.StringAttribute{
 				Computed: true,
@@ -237,7 +240,7 @@ func (r *ContactResource) Read(ctx context.Context, req resource.ReadRequest, re
 	input := &contacts.ContactsLocateContactParams{
 		Context: ctx,
 		Fields:  contactDefaultFields,
-		Etag:    data.ETag.ValueString(),
+		Etag:    data.ID.ValueString(),
 	}
 
 	httpResp, err := r.client.Contacts.ContactsLocateContact(input)
@@ -335,7 +338,7 @@ func (r *ContactResource) Update(ctx context.Context, req resource.UpdateRequest
 					Type: &models.WebitelContactsLookup{
 						ID: phone.Code.ValueString(),
 					},
-					Number: phone.Code.ValueStringPointer(),
+					Number: phone.Destination.ValueStringPointer(),
 				}
 
 				input.Phones = append(input.Phones, obj)
@@ -344,7 +347,7 @@ func (r *ContactResource) Update(ctx context.Context, req resource.UpdateRequest
 
 		params := &contacts.ContactsUpdateContactParams{
 			Context: ctx,
-			Etag:    plan.ETag.ValueString(),
+			Etag:    state.ETag.ValueString(),
 			Input:   input,
 			Fields:  contactDefaultFields,
 		}
