@@ -362,7 +362,7 @@ func (r *ContactResource) Update(ctx context.Context, req resource.UpdateRequest
 		}
 
 		// Return error if the HTTP status code is not 200 OK
-		if httpResp.IsCode(http.StatusOK) {
+		if !httpResp.IsCode(http.StatusOK) {
 			resp.Diagnostics.AddError(
 				"Unable to Update Resource",
 				"An unexpected error occurred while attempting to update the resource. "+
