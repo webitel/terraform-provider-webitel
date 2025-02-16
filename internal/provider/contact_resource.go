@@ -473,8 +473,9 @@ func contactToTF(in *models.WebitelContactsContact) *ContactResourceModel {
 }
 
 func mapToVariables(m basetypes.MapValue) (map[string]string, error) {
-	variables := map[string]string{}
-	for k, v := range m.Elements() {
+	elements := m.Elements()
+	variables := make(map[string]string, len(elements))
+	for k, v := range elements {
 		if vString, ok := v.(types.String); ok {
 			variables[k] = vString.ValueString()
 		} else {
@@ -486,9 +487,9 @@ func mapToVariables(m basetypes.MapValue) (map[string]string, error) {
 }
 
 func listToLabels(l basetypes.ListValue) ([]string, error) {
-	var labels []string
-
-	for _, v := range l.Elements() {
+	elements := l.Elements()
+	labels := make([]string, 0, len(elements))
+	for _, v := range elements {
 		if vString, ok := v.(types.String); ok {
 			labels = append(labels, vString.ValueString())
 		} else {
